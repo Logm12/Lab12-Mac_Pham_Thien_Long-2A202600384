@@ -1,7 +1,7 @@
 #  Delivery Checklist — Day 12 Lab Submission
 
 > **Student Name:** Mạc Phạm Thiên Long
-> **Student ID:** AICB-P1-001 (Demo)
+> **Student ID:** 2A202600384
 > **Date:** 2026-04-17
 
 ---
