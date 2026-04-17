@@ -47,25 +47,118 @@ Trong quá trình develop, mã nguồn ứng dụng sẽ thay đổi liên tục
 **Best practice:** Thường dùng `ENTRYPOINT` để khai báo tệp thực thi chính (vd: `ENTRYPOINT ["python", "app.py"]`) và dùng `CMD` để truyền các tham số mặc định có thể thay đổi được (vd: `CMD ["--port", "8000"]`).
 
 ### Exercise 2.3: Image size comparison
-- Develop: 424 MB
-- Production: 56.6 MB
-- Difference: 86.6%
+- Develop: 1.66 GB
+<p align="center">
+  <img src="extras/myagent_develop_image_size.png" width="400">
+</p>
+- Production: 236 MB
+<p align="center">
+  <img src="extras/myagent_advanced_image_size.png" width="400">
+</p>
+- Difference: 85.8%
 
 ## Part 3: Cloud Deployment
 
 ### Exercise 3.1: Railway deployment
-- URL: https://your-app.railway.app
-- Screenshot: [Link to screenshot in repo]
+- URL: https://lab12-production-5585.up.railway.app
+- Screenshot:
+<p align="center">
+  <img src="extras/railway-deployment.png" width="400">
+</p>
+- Deployment status:
+<p align="center">
+  <img src="extras/railway-deployment-status.png" width="400">
+</p>
 
 ## Part 4: API Security
 
 ### Exercise 4.1-4.3: Test results
-[Paste your test outputs]
+- **Lần 1: Không có key**
+  - Câu lệnh: `curl.exe -i -X POST -H "Content-Type: application/json" -d '{"question":"hello"}' http://localhost:8000/ask`
+  - Kết quả: `HTTP/1.1 401 Unauthorized`.
+  - Log output:
+    ```json
+    {"detail":"Invalid or missing API key. Include header: X-API-Key: <key>"}
+    ```
+- **Lần 2: Có key "demo-key-123"**
+  - Câu lệnh: `curl.exe -i -X POST -H "X-API-Key: demo-key-123" -H "Content-Type: application/json" -d '{"question":"Hello"}' http://localhost:8000/ask`
+  - Kết quả: `HTTP/1.1 200 OK`.
+  - Log output:
+    ```json
+    {
+      "question": "Hello",
+      "answer": "Chào bạn, tôi là Chuyên gia Tâm lý AI. Tôi luôn sẵn lòng lắng nghe bạn.",
+      "usage": { "prompt_tokens": 2, "completion_tokens": 40, "total_tokens": 42, "cost": 0.000027 }
+    }
+    ```
+
+#### Ex 4.2: JWT Authentication Flow
+1. **Lấy Token**: Gửi username/password tới endpoint `/auth/token`.
+   - Log output (Success):
+     ```json
+     {
+       "access_token": "eyJhbGciOiJIUzI1NiIs...",
+       "token_type": "bearer",
+       "expires_in_minutes": 60
+     }
+     ```
+2. **Sử dụng Token**: Token được đính kèm vào header `Authorization: Bearer <token>`.
+3. **Xác thực**: Server giải mã token để lấy thông tin người dùng.
+
+#### Ex 4.3: Rate Limiting
+- **Kết quả test**: Khi gọi API liên tục 15 lần, từ request thứ 11 hệ thống trả về:
+  - Log output (429):
+    ```json
+    {
+      "detail": {
+        "error": "Rate limit exceeded",
+        "limit": 10,
+        "window_seconds": 60,
+        "retry_after_seconds": 59
+      }
+    }
+    ```
 
 ### Exercise 4.4: Cost guard implementation
-[Explain your approach]
+- **Cách tiếp cận**: Hệ thống theo dõi chi phí sử dụng LLM dựa trên số lượng token của input và output. 
+- **Logic thực hiện**:
+  1. Mỗi người dùng có một hạn mức ngân sách hàng ngày (ví dụ: $1.0/ngày).
+  2. Trước khi gọi LLM, hệ thống kiểm tra ngân sách còn lại. Nếu đã hết, trả về lỗi `402 Payment Required`.
+  3. Sau khi LLM phản hồi, hệ thống tính toán chi phí (dựa trên giá của model như gpt-4o-mini) và trừ vào ngân sách của người dùng đó.
+  4. Có hệ thống cảnh báo (Warning log) khi người dùng sử dụng vượt quá 80% hạn mức.
+- **Lợi ích**: Bảo vệ hệ thống khỏi việc bị lạm dụng hoặc các hóa đơn API LLM tăng đột biến ngoài ý muốn.
 
 ## Part 5: Scaling & Reliability
 
 ### Exercise 5.1-5.5: Implementation notes
-[Your explanations and test results]
+
+#### 1. Health Checks (Liveness & Readiness)
+- **Liveness Probe (`/health`)**:
+  - Log output:
+    ```json
+    {
+      "status": "ok",
+      "version": "1.0.0",
+      "environment": "staging",
+      "uptime_seconds": 15.2,
+      "checks": { "llm": "mock" }
+    }
+    ```
+- **Readiness Probe (`/ready`)**:
+  - Log output:
+    ```json
+    { "ready": true }
+    ```
+
+#### 2. Graceful Shutdown
+- Khi nhận tín hiệu `SIGTERM` (từ Docker hoặc Cloud platform), agent sẽ không ngắt kết nối ngay lập tức.
+- Thay vào đó, nó sẽ chuyển trạng thái `ready` thành `false` để Load Balancer ngừng gửi request mới, sau đó đợi các request hiện tại xử lý xong (tối đa 30 giây) rồi mới đóng ứng dụng một cách an toàn.
+
+#### 3. Stateless Design
+- **Vấn đề**: Việc lưu lịch sử hội thoại (conversation history) trong biến bộ nhớ (in-memory) sẽ gây lỗi khi hệ thống scale lên nhiều instance. Mỗi request có thể đến một instance khác nhau không chứa history đó.
+- **Giải pháp**: Chuyển toàn bộ state (history, rate limit counter) sang **Redis**. Điều này giúp các agent instance có thể thay thế lẫn nhau mà không làm mất context của người dùng.
+
+#### 4. Load Balancing & Scaling
+- Sử dụng Nginx làm Load Balancer để phân tán traffic đều cho các agent instance.
+- Khi một instance bị lỗi, Load Balancer tự động nhận biết qua health check và điều hướng traffic sang các instance còn lại, đảm bảo tính sẵn sàng cao (High Availability).
+

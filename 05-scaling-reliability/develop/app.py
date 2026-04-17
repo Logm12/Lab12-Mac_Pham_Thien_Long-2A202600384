@@ -196,4 +196,5 @@ if __name__ == "__main__":
         port=port,
         # ✅ Cho phép graceful shutdown
         timeout_graceful_shutdown=30,
+        reload=False
     )
