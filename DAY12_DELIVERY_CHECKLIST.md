@@ -190,7 +190,7 @@ done
 **Submit your GitHub repository URL:**
 
 ```
-https://github.com/your-username/day12-agent-deployment
+https://github.com/Logm12/Lab12-Mac_Pham_Thien_Long-2A202600384
 ```
 
 **Deadline:** 17/4/2026
