@@ -1,4 +1,9 @@
 # Day 12 Lab - Mission Answers
+> **Student Name:** Mạc Phạm Thiên Long
+> 
+> **Student ID:** 2A202600384
+> 
+> **Date:** 2026-04-17
 
 ## Part 1: Localhost vs Production
 
